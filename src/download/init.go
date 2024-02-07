@@ -1,16 +1,20 @@
 package download
 
 import (
+	"ashu_music/conf"
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/openatx/go-imageio"
+	"github.com/u2takey/go-utils/uuid"
 )
 
 var (
@@ -21,7 +25,13 @@ var (
 )
 
 func Init() {
-	_, err := os.Stat(dir)
+	exe, err := checkFfmpeg()
+	if err != nil {
+		panic(err)
+	}
+	conf.GetConfig().FfmpegPath = exe
+	fmt.Println("ffmpeg: ", exe)
+	_, err = os.Stat(dir)
 	if err == nil {
 		return
 	}
@@ -64,7 +74,7 @@ func getBvInfo(bvId string) (*bvInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	content := doc.Find("script").Eq(2).Text()
+	content := doc.Find("script").Eq(3).Text()
 	raw := struct {
 		Data struct {
 			Dash struct {
@@ -115,13 +125,12 @@ func getAudioPart(bvInfo *bvInfo, begin int, end int) ([]byte, bool, error) {
 	return bytes, isEnd, nil
 }
 
-func Download(bvId string) error {
+func download(bvId string, path string) error {
 	bvInfo, err := getBvInfo(bvId)
 	if err != nil {
 		return err
 	}
-	filePath := filepath.Join(dir, bvInfo.Name+".m4a")
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
@@ -143,4 +152,60 @@ func Download(bvId string) error {
 	}
 	write.Flush()
 	return nil
+}
+
+func TransferM4sFile(m4sPath string, mp3Path string) error {
+	cmd := exec.Command(conf.GetConfig().FfmpegPath, "-i", m4sPath, "-acodec", "libmp3lame", mp3Path, "-y")
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Download(bvId string) error {
+	m4sPath := filepath.Join(dir, uuid.NewUUID()+".m4s")
+	err := download(bvId, m4sPath)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(m4sPath)
+	// TODO: 这里可以优化
+	bvInfo, err := getBvInfo(bvId)
+	if err != nil {
+		return err
+	}
+	mp3Path := filepath.Join(dir, bvInfo.Name+".mp3")
+	err = TransferM4sFile(m4sPath, mp3Path)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkFfmpeg() (string, error) {
+	curPath := filepath.Join(conf.GetConfig().RootDir, "src/download")
+	ffmpegExe := filepath.Join(curPath, "ffmpeg")
+	_, err := os.Stat(ffmpegExe)
+	if err == nil {
+		return ffmpegExe, nil
+	}
+	// 下载ffmpeg exe
+	exe, err := imageio.GetFFmpegExe()
+	if err != nil {
+		return "", err
+	}
+	exePath := filepath.Join(curPath, exe)
+	err = os.Rename(exePath, ffmpegExe)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("chmod", "a+x", ffmpegExe)
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+	return ffmpegExe, nil
 }

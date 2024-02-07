@@ -1,29 +1,17 @@
+/*
+Copyright © 2023 NAME HERE <EMAIL ADDRESS>
+
+*/
 package main
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
+	"ashu_music/cmd"
+	"ashu_music/conf"
+	"ashu_music/src"
 )
 
 func main() {
-	a := app.New()
-	w := a.NewWindow("Hello")
-	ROOTDIR, _ := os.Getwd()
-
-	musicDir := filepath.Join(ROOTDIR, "music")
-	fmt.Println(musicDir)
-	hello := widget.NewLabel("Hello Fyne!")
-	w.SetContent(container.NewVBox(
-		hello,
-		widget.NewButton("Hi!", func() {
-			hello.SetText("Welcome :)")
-		}),
-	))
-
-	w.ShowAndRun()
+	conf.Init()
+	src.Init()
+	cmd.Execute()
 }
